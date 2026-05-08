@@ -10,7 +10,7 @@ try:
     from .OLAPlugDLLHelper import OLAPlugDLLHelper
 
     __all__ = ['OLAPlugServer', 'OLAPlugDLLHelper']
-except ImportError:
+except Exception:
     # 在某些环境下可能无法导入,忽略错误
     pass
 
