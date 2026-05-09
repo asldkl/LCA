@@ -226,14 +226,22 @@ class YOLOONNXEngine:
                 sess_options = ort.SessionOptions()
                 sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
 
-                # 自动检测GPU支持
+                # 自动检测ONNX Runtime provider，和地图定位共用同一套选择逻辑
                 available_providers = ort.get_available_providers()
-                if 'DmlExecutionProvider' not in available_providers:
-                    raise RuntimeError("DirectML GPU not available; required to use only DirectML")
-                from utils.dml_adapter import select_dml_device_id
-                device_id, device_desc = select_dml_device_id()
-                providers = [('DmlExecutionProvider', {'device_id': device_id})]
-                logger.info("ONNX Runtime: DirectML GPU only (device_id=%s, adapter=%s)", device_id, device_desc)
+                from utils.dml_adapter import (
+                    build_onnxruntime_providers,
+                    is_gpu_onnx_provider,
+                    provider_name_from_entry,
+                )
+
+                providers, device_desc = build_onnxruntime_providers(available_providers)
+                requested_provider_names = [provider_name_from_entry(provider) for provider in providers]
+                logger.info(
+                    "ONNX Runtime providers: requested=%s target=%s available=%s",
+                    requested_provider_names,
+                    device_desc,
+                    list(available_providers),
+                )
 
                 self._session = ort.InferenceSession(
                     str(model_path),
@@ -243,7 +251,7 @@ class YOLOONNXEngine:
 
                 # 记录实际使用的provider
                 actual_provider = self._session.get_providers()[0] if self._session.get_providers() else 'Unknown'
-                self._device = 'GPU' if actual_provider == 'DmlExecutionProvider' else 'CPU'
+                self._device = 'GPU' if is_gpu_onnx_provider(actual_provider) else 'CPU'
                 logger.info(f"ONNX Runtime实际使用: {actual_provider}")
 
                 # 获取模型输入输出信息

@@ -555,6 +555,14 @@ def execute_task(params: Dict[str, Any], counters: Dict[str, int], execution_mod
             if draw_on_window:
                 _set_overlay_render_mode("稳定优先")
                 frame_shape = screenshot_shape
+                _update_tracking_state(
+                    target_hwnd,
+                    [],
+                    frame_shape,
+                    screenshot,
+                    tracking_engine=locals().get("current_engine"),
+                    executor=executor,
+                )
                 draw_detections_on_window(target_hwnd, [], frame_shape, executor=executor)
             return _handle_result(False, on_failure, failure_jump_id, card_id)
 
@@ -580,9 +588,15 @@ def execute_task(params: Dict[str, Any], counters: Dict[str, int], execution_mod
         # 在窗口上绘制检测框
         if draw_on_window:
             _set_overlay_render_mode("稳定优先")
-            with _tracking_lock:
-                _tracking_state = None
             draw_detections_on_window(target_hwnd, target_detections, screenshot_shape, executor=executor)
+            _update_tracking_state(
+                target_hwnd,
+                target_detections,
+                screenshot_shape,
+                screenshot,
+                tracking_engine=locals().get("current_engine"),
+                executor=executor,
+            )
 
         if action_requires_input_lock:
             lock_resource = resolve_input_lock_resource(
@@ -3554,7 +3568,8 @@ def _dispatch_overlay_update(hwnd: int, detections: List, frame_shape: Tuple, ex
 
 
 def _update_tracking_state(hwnd: int, detections: List, frame_shape: Tuple,
-                           screenshot: Optional[np.ndarray], tracking_engine: Optional[str] = None):
+                           screenshot: Optional[np.ndarray], tracking_engine: Optional[str] = None,
+                           executor: Any = None):
     global _tracking_state, _tracking_active, _tracking_thread
 
     if not detections:
@@ -3569,6 +3584,7 @@ def _update_tracking_state(hwnd: int, detections: List, frame_shape: Tuple,
                         _tracking_state["frame_shape"] = frame_shape
                     if tracking_engine:
                         _tracking_state["tracking_engine"] = tracking_engine
+                    _tracking_state["executor"] = executor
         return
     if screenshot is None:
         with _tracking_lock:
@@ -3595,6 +3611,11 @@ def _update_tracking_state(hwnd: int, detections: List, frame_shape: Tuple,
         prev_state = None
         with _tracking_lock:
             prev_state = _tracking_state
+        try:
+            if prev_state and int(prev_state.get("hwnd") or 0) != int(hwnd or 0):
+                prev_state = None
+        except Exception:
+            prev_state = None
         prev_model_boxes = []
         prev_model_ts = None
         if prev_state:
@@ -3698,6 +3719,7 @@ def _update_tracking_state(hwnd: int, detections: List, frame_shape: Tuple,
             "last_model_update": now,
             "last_model_seen": now,
         }
+        state["executor"] = executor
 
         with _tracking_lock:
             if tracking_engine:
@@ -3778,11 +3800,12 @@ def _tracking_loop():
         now = time.perf_counter()
         hwnd = state.get("hwnd")
         frame_shape = state.get("frame_shape")
+        executor = state.get("executor")
         last_model_seen = state.get("last_model_seen", state.get("last_model_update", now))
         if now - last_model_seen > _tracking_missing_timeout:
             with _tracking_lock:
                 _tracking_state = None
-            _dispatch_overlay_update(hwnd, [], frame_shape)
+            _dispatch_overlay_update(hwnd, [], frame_shape, executor=executor)
             precise_sleep(_tracking_interval)
             continue
 
@@ -3796,7 +3819,7 @@ def _tracking_loop():
                         current_state = _tracking_state
                         if current_state is not None and int(current_state.get("hwnd") or 0) == int(hwnd or 0):
                             _tracking_state = None
-                    _dispatch_overlay_update(hwnd, [], frame_shape)
+                    _dispatch_overlay_update(hwnd, [], frame_shape, executor=executor)
                     capture_fail_streak = 0
                 precise_sleep(_tracking_interval)
                 continue
@@ -4195,7 +4218,7 @@ def _tracking_loop():
 
         model_age = max(0.0, now - state.get("last_model_update", now))
         if model_age >= _tracking_draw_gap:
-            _dispatch_overlay_update(hwnd, updated_boxes, frame_shape)
+            _dispatch_overlay_update(hwnd, updated_boxes, frame_shape, executor=executor)
         precise_sleep(_tracking_interval)
 
 
