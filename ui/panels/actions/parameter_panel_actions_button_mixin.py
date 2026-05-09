@@ -3,8 +3,8 @@ from utils.window_binding_utils import get_active_bound_window_hwnd
 
 
 class ParameterPanelActionsButtonMixin:
-    _BACKGROUND_ACTIONS = {'test_ocr_output', 'test_image_recognition', 'test_color_recognition', 'test_map_navigation'}
-    _HIDE_WINDOW_ACTIONS = {'test_image_recognition', 'test_color_recognition', 'test_map_navigation'}
+    _BACKGROUND_ACTIONS = {'test_ocr_output', 'test_image_recognition', 'test_color_recognition'}
+    _HIDE_WINDOW_ACTIONS = {'test_image_recognition', 'test_color_recognition'}
 
     def _handle_button_click(self, name: str, param_def: Dict[str, Any]):
         """Handle button click."""

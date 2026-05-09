@@ -761,53 +761,6 @@ QFrame[tableCard="true"] QTableWidget {
     border-radius: 0;
 }
 
-/* 地图导航子弹窗 */
-QDialog#mapNavPreviewDialog QLabel#minimapPreviewImage {
-    background-color: #252525;
-    border: 1px solid #3e3e3e;
-    border-radius: 10px;
-    padding: 8px;
-}
-
-QDialog#mapNavPreviewDialog QLabel#minimapPreviewInfo,
-QLabel#routeVisibilitySummaryLabel,
-QLabel#routePointActionSummaryLabel,
-QLabel#mapSelectorRouteSummary,
-QLabel#routeVisibilityCategoryCount,
-QLabel#routeVisibilityEmptyLabel,
-QLabel#routePointActionCategoryCount,
-QLabel#routePointActionDetailLabel,
-QLabel#routePointActionEmptyLabel {
-    color: #b0b0b0;
-}
-
-QLabel#routeVisibilityTip,
-QLabel#routePointActionTip,
-QLabel#mapSelectorTip {
-    background-color: #2d2d2d;
-    color: #b0b0b0;
-    border: 1px solid #3e3e3e;
-    border-radius: 8px;
-    padding: 8px 10px;
-}
-
-QLabel#routeVisibilityCategoryTitle,
-QLabel#routePointActionCategoryTitle {
-    font-weight: 600;
-}
-
-QScrollArea#routeVisibilityScrollArea,
-QWidget#routeVisibilityScrollContent,
-QScrollArea#routePointActionScrollArea,
-QWidget#routePointActionScrollContent {
-    background: transparent;
-    border: none;
-}
-
-QWidget#mapNavLockOverlay {
-    background: transparent;
-}
-
 /* 琛ㄥご */
 QHeaderView::section {
     background-color: #2d2d2d;

@@ -2132,22 +2132,6 @@ class TaskCard(QGraphicsObject):
                 "目标范围X2",
                 "目标范围Y2",
             ])
-        elif self.task_type == "地图导航":
-            suffixes.extend([
-                "地图X",
-                "地图Y",
-                "定位置信度",
-                "定位模式",
-                "锁定状态",
-                "失锁次数",
-                "目标范围X1",
-                "目标范围Y1",
-                "目标范围X2",
-                "目标范围Y2",
-                "路线ID",
-                "最近路点索引",
-                "距下一路点距离",
-            ])
         elif self.task_type in ("AI工具", "图片点击", "查找图片并点击"):
             suffixes.extend([
                 "AI输出内容",

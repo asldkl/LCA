@@ -35,7 +35,6 @@ class ControlCenterWorkflowStopMixin:
         self._deferred_global_stop_cleanup_pending = False
         logger.info("\u5f00\u59cb\u6267\u884c\u4e2d\u63a7\u505c\u6b62\u540e\u7684\u5ef6\u8fdf\u5168\u5c40\u8d44\u6e90\u6e05\u7406")
         self._cleanup_yolo_runtime_after_global_stop()
-        self._cleanup_map_navigation_runtime_after_global_stop()
         self._cleanup_screenshot_runtime_after_global_stop()
         self._cleanup_ocr_runtime_after_global_stop()
         self._cleanup_runtime_image_after_global_stop()
@@ -49,18 +48,6 @@ class ControlCenterWorkflowStopMixin:
             cleanup_yolo_runtime_on_stop(release_engine=True, compact_memory=True)
         except Exception as e:
             logger.warning(f"\u4e2d\u63a7\u5ef6\u8fdf\u6e05\u7406YOLO\u8fd0\u884c\u65f6\u5931\u8d25: {e}")
-
-    def _cleanup_map_navigation_runtime_after_global_stop(self):
-        try:
-            from utils.runtime_image_cleanup import cleanup_map_navigation_runtime_on_stop
-
-            cleanup_map_navigation_runtime_on_stop(
-                release_bundle_cache=True,
-                auto_close_only=True,
-                include_orphans=False,
-            )
-        except Exception as e:
-            logger.warning(f"\u4e2d\u63a7\u5ef6\u8fdf\u6e05\u7406\u5730\u56fe\u5bfc\u822a\u8fd0\u884c\u65f6\u5931\u8d25: {e}")
 
     def _cleanup_screenshot_runtime_after_global_stop(self):
         try:
