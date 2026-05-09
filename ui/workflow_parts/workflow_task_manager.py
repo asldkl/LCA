@@ -11,7 +11,6 @@ from functools import partial
 from typing import Dict, List, Optional, Any, Set, Tuple
 from PySide6.QtCore import QObject, Signal, QTimer
 
-from market.storage import resolve_runtime_session_dir
 from ..workflow_parts.workflow_task import WorkflowTask
 from utils.workflow_workspace_utils import get_effective_workflow_images_dir
 from utils.window_binding_utils import (
@@ -324,14 +323,11 @@ class WorkflowTaskManager(QObject):
             return
         session_dir = str(getattr(task, 'market_session_dir', '') or '').strip()
         if not session_dir:
-            session_path = resolve_runtime_session_dir(str(getattr(task, 'filepath', '') or ''))
-            session_dir = str(session_path) if session_path else ''
-        if not session_dir:
             return
         try:
             shutil.rmtree(session_dir, ignore_errors=True)
         except Exception as exc:
-            logger.warning("清理共享平台运行会话目录失败: dir=%s, error=%s", session_dir, exc)
+            logger.warning("清理运行会话目录失败: dir=%s, error=%s", session_dir, exc)
 
     def add_task(self, name: str, filepath: str, workflow_data: dict) -> int:
         """
@@ -933,12 +929,6 @@ class WorkflowTaskManager(QObject):
             target_id = target_info
             target_name = None
 
-        # 检查是否跳转到自身（不允许）
-        if target_id == source_task.task_id:
-            logger.warning(f"  结果: 跳转目标ID是自身，不执行跳转")
-            logger.info(f"==================================")
-            return None
-
         # 优先使用ID查找
         if target_id is not None and target_id in self.tasks:
             target_task = self.tasks[target_id]
@@ -950,7 +940,7 @@ class WorkflowTaskManager(QObject):
         if target_name:
             logger.info(f"  ID={target_id} 不存在，尝试通过名称 '{target_name}' 查找")
             for task in self.tasks.values():
-                if task.name == target_name and task.task_id != source_task.task_id:
+                if task.name == target_name:
                     logger.info(f"  结果: 通过名称找到跳转目标 -> '{task.name}' (ID={task.task_id})")
                     logger.info(f"==================================")
                     return task.task_id

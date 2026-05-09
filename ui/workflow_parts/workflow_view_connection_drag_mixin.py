@@ -62,8 +62,6 @@ class WorkflowViewConnectionDragMixin:
             card = item if isinstance(item, TaskCard) else item.parentItem()
             if not isinstance(card, TaskCard):
                 continue
-            if card == self.drag_start_card: # Don't snap to the starting card
-                continue
             # 跳过没有输入端口的卡片（如附加条件）
             if hasattr(card, 'no_input_ports') and card.no_input_ports:
                 continue
@@ -161,9 +159,7 @@ class WorkflowViewConnectionDragMixin:
             logger.debug(f"  [DRAG_VALIDATION] All validations passed. Proceeding with connection creation.")
             # <<< END ENHANCED >>>
 
-            if start_card == end_card:
-                logger.debug("  [DRAG_DEBUG] Drag ended on self. Connection not created.")
-            elif any(conn for conn in start_card.connections
+            if any(conn for conn in start_card.connections
                      if isinstance(conn, ConnectionLine) and conn.end_item == end_card and conn.line_type == port_type):
                 logger.debug(f"  [DRAG_DEBUG] Duplicate connection detected ({start_card.card_id} -> {end_card.card_id}, type: {port_type}). Not created.")
                 # --- ADDED: Force cleanup when duplicate detected during manual connection ---
@@ -179,8 +175,6 @@ class WorkflowViewConnectionDragMixin:
                 else:
                     logger.debug("  [拖拽调试] 清理后仍然创建连线失败")
                 # --- END ADDED ---
-            elif (port_type == ConnectionType.SUCCESS.value or port_type == ConnectionType.FAILURE.value) and start_card == end_card:
-                logger.debug(f"  [DRAG_DEBUG] Self-loop connection ignored for Success/Failure port type on card {start_card.card_id}.")
             else:
                 logger.debug(f"  [SYNC_DEBUG] Checking for existing output connection from card {start_card.card_id}, port type '{port_type}'.")
                 existing_connection_to_remove = None

@@ -167,14 +167,14 @@ class WorkflowViewConnectionSequenceMixin:
                     on_success = source_card.parameters.get('on_success')
                     success_target_id = source_card.parameters.get('success_jump_target_id')
                     if on_success == '跳转到步骤' and success_target_id is not None:
-                        if success_target_id in card_map and success_target_id != card_id:
+                        if success_target_id in card_map:
                             expected_connections.add((card_id, success_target_id, 'success'))
 
                     # Check Failure Jump
                     on_failure = source_card.parameters.get('on_failure')
                     failure_target_id = source_card.parameters.get('failure_jump_target_id')
                     if on_failure == '跳转到步骤' and failure_target_id is not None:
-                        if failure_target_id in card_map and failure_target_id != card_id:
+                        if failure_target_id in card_map:
                             expected_connections.add((card_id, failure_target_id, 'failure'))
                 except RuntimeError:
                     # 对象已被Qt删除，跳过
@@ -391,7 +391,7 @@ class WorkflowViewConnectionSequenceMixin:
         success_target_id = card.parameters.get('success_jump_target_id')
         if on_success == '跳转到步骤' and success_target_id is not None:
             target_card = self.cards.get(success_target_id)
-            if target_card and target_card != card:
+            if target_card:
                 self.add_connection(card, target_card, ConnectionType.SUCCESS.value)
 
         # 注释已清理（原注释编码损坏）
@@ -399,5 +399,5 @@ class WorkflowViewConnectionSequenceMixin:
         failure_target_id = card.parameters.get('failure_jump_target_id')
         if on_failure == '跳转到步骤' and failure_target_id is not None:
             target_card = self.cards.get(failure_target_id)
-            if target_card and target_card != card:
+            if target_card:
                 self.add_connection(card, target_card, ConnectionType.FAILURE.value)
