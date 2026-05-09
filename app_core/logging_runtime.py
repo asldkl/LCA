@@ -18,7 +18,6 @@ LOG_RETENTION_DAYS = 7
 MAX_LOG_MESSAGE_CHARS = 512
 MAX_LOG_DIR_SIZE_MB = 50
 LOG_MAINTENANCE_INTERVAL_SEC = 300
-MAX_AUTH_SERVER_LOG_SIZE_MB = 20
 
 logger = logging.getLogger(__name__)
 
@@ -107,15 +106,6 @@ def cleanup_log_files_and_temp(
             except OSError as e:
                 if verbose:
                     logger.warning(f"清理失败: {os.path.basename(filepath)}: {e}")
-
-    root_log_limits = (
-        (os.path.join(LOG_DIR, "auth_server.log"), MAX_AUTH_SERVER_LOG_SIZE_MB * 1024 * 1024),
-    )
-    for filepath, max_bytes in root_log_limits:
-        released = _truncate_log_file_if_oversized(filepath, max_bytes, verbose=verbose)
-        if released > 0:
-            truncated_count += 1
-            deleted_size += released
 
     if callable(cleanup_temp_files_cb):
         cleanup_temp_files_cb()
