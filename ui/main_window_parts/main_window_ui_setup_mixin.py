@@ -251,7 +251,7 @@ class MainWindowUiSetupMixin:
 
         self._task_signal_bindings: Dict[int, Dict[str, Any]] = {}
 
-        # 运行变量持久化统计（供内存巡检画像使用）
+        # 运行变量持久化统计
 
         self._runtime_var_persist_stats: Dict[str, Any] = {
 
@@ -425,11 +425,11 @@ class MainWindowUiSetupMixin:
 
         self.main_layout.addWidget(self.step_detail_label)
 
-        # QQ群链接（覆盖在状态栏左侧）
+        # 官网链接（覆盖在状态栏左侧）
 
         self.qq_link_label = QLabel(self.step_detail_label)
 
-        self.qq_link_label.setText('<a href="#" style="color: #1E90FF; text-decoration: none;">点击加入交流群</a>')
+        self.qq_link_label.setText('<a href="https://github.com/wuzhijing88/LCA" style="color: #1E90FF; text-decoration: none;">点击打开开源地址</a>')
 
         self.qq_link_label.setTextFormat(Qt.TextFormat.RichText)
 
@@ -443,7 +443,7 @@ class MainWindowUiSetupMixin:
 
         self.qq_link_label.adjustSize()
 
-        self.qq_link_label.linkActivated.connect(self._show_qq_group_dialog)
+        self.qq_link_label.linkActivated.connect(self._open_official_website)
 
         font = self.step_detail_label.font()
 

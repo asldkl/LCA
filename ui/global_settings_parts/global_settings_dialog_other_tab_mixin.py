@@ -110,7 +110,7 @@ class GlobalSettingsDialogOtherTabMixin:
 
         self.enable_update_check = QCheckBox("启用自动检查更新")
 
-        self.enable_update_check.setChecked(self.current_config.get('enable_update_check', True))
+        self.enable_update_check.setChecked(self.current_config.get('enable_update_check', False))
 
         update_layout.addWidget(self.enable_update_check)
 

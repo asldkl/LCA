@@ -383,115 +383,13 @@ class MainWindowDialogMixin:
 
                     pass
 
-    def _get_configured_qq_groups(self):
+    def _open_official_website(self, url: str = "https://github.com/wuzhijing88/LCA"):
 
-        """从配置中读取并过滤有效QQ群链接。"""
-
-        groups = self.config.get('qq_group_links', [])
-
-        if not isinstance(groups, list):
-
-            return []
-
-        valid_groups = []
-
-        for group in groups:
-
-            if not isinstance(group, dict):
-
-                continue
-
-            group_name = str(group.get('name', '')).strip()
-
-            group_id = str(group.get('id', '')).strip()
-
-            group_url = str(group.get('url', '')).strip()
-
-            if not group_name or not group_id or not group_url:
-
-                continue
-
-            valid_groups.append({
-
-                'name': group_name,
-
-                'id': group_id,
-
-                'url': group_url,
-
-            })
-
-        return valid_groups
-
-    def _show_qq_group_dialog(self):
-
-        """显示QQ群对话框"""
-
-        from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton
-
-        dialog = QDialog(self)
-
-        dialog.setWindowTitle("交流群")
-
-        dialog.setMinimumWidth(300)
-
-        layout = QVBoxLayout(dialog)
-
-        # 标题
-
-        title_label = QLabel("选择要加入的群：")
-
-        title_label.setStyleSheet("font-weight: bold; font-size: 14px; margin-bottom: 10px;")
-
-        layout.addWidget(title_label)
-
-        qq_groups = self._get_configured_qq_groups()
-
-        for group in qq_groups:
-
-            group_btn = QPushButton(f"{group['name']}：{group['id']}")
-
-            group_btn.setStyleSheet("padding: 10px; text-align: left;")
-
-            group_btn.clicked.connect(
-
-                lambda _checked=False, group_url=group['url']: self._open_qq_group(group_url, dialog)
-
-            )
-
-            layout.addWidget(group_btn)
-
-        if not qq_groups:
-
-            empty_label = QLabel("暂无可用群链接")
-
-            empty_label.setStyleSheet("color: #666; padding: 8px 2px;")
-
-            layout.addWidget(empty_label)
-
-        # 关闭按钮
-
-        close_btn = QPushButton("取消")
-
-        close_btn.clicked.connect(dialog.reject)
-
-        layout.addWidget(close_btn)
-
-        center_window_on_widget_screen(dialog, self)
-
-        dialog.exec()
-
-        dialog.deleteLater()
-
-    def _open_qq_group(self, url: str, dialog):
-
-        """打开QQ群链接并关闭对话框"""
+        """打开开源地址。"""
 
         import webbrowser
 
-        webbrowser.open(url)
-
-        dialog.accept()
+        webbrowser.open(url or "https://github.com/wuzhijing88/LCA")
 
     def _on_control_center_closed(self):
 
