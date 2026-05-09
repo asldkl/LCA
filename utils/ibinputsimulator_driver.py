@@ -169,6 +169,7 @@ class IbInputSimulatorDriver:
         # 追踪按下未释放输入，停止/退出时统一回收。
         self._pressed_keys = set()
         self._pressed_mouse_buttons = set()
+        self._sendinput_pressed_keys = set()
         self._request_id = 0
         self._ready = False
         self._recent_stderr: List[str] = []
@@ -1308,6 +1309,151 @@ class IbInputSimulatorDriver:
             return f"F{lower_text[1:]}"
         return text
 
+    @staticmethod
+    def _is_modifier_key_name(key: Any) -> bool:
+        return str(key or "").strip().lower() in {
+            "ctrl",
+            "control",
+            "lctrl",
+            "rctrl",
+            "shift",
+            "lshift",
+            "rshift",
+            "alt",
+            "lalt",
+            "ralt",
+            "win",
+            "lwin",
+            "rwin",
+        }
+
+    @staticmethod
+    def _sendinput_vk_for_key(key: Any) -> Optional[int]:
+        text = str(key or "").strip()
+        if not text:
+            return None
+        lower_text = text.lower()
+        vk_map = {
+            "ctrl": 0x11,
+            "control": 0x11,
+            "lctrl": 0xA2,
+            "rctrl": 0xA3,
+            "shift": 0x10,
+            "lshift": 0xA0,
+            "rshift": 0xA1,
+            "alt": 0x12,
+            "lalt": 0xA4,
+            "ralt": 0xA5,
+            "win": 0x5B,
+            "lwin": 0x5B,
+            "rwin": 0x5C,
+            "enter": 0x0D,
+            "return": 0x0D,
+            "tab": 0x09,
+            "space": 0x20,
+            "esc": 0x1B,
+            "escape": 0x1B,
+            "backspace": 0x08,
+            "delete": 0x2E,
+            "insert": 0x2D,
+            "home": 0x24,
+            "end": 0x23,
+            "pgup": 0x21,
+            "pageup": 0x21,
+            "pgdn": 0x22,
+            "pagedown": 0x22,
+            "up": 0x26,
+            "down": 0x28,
+            "left": 0x25,
+            "right": 0x27,
+        }
+        if lower_text in vk_map:
+            return vk_map[lower_text]
+        if lower_text.startswith("f") and lower_text[1:].isdigit():
+            f_index = int(lower_text[1:])
+            if 1 <= f_index <= 24:
+                return 0x70 + f_index - 1
+        if len(text) == 1:
+            vk = ctypes.windll.user32.VkKeyScanW(ord(text))
+            if vk != -1:
+                return int(vk) & 0xFF
+        return None
+
+    @classmethod
+    def _sendinput_key_event(cls, key: Any, key_down: bool) -> bool:
+        vk_code = cls._sendinput_vk_for_key(key)
+        if vk_code is None:
+            return False
+
+        class KEYBDINPUT(ctypes.Structure):
+            _fields_ = [
+                ("wVk", wintypes.WORD),
+                ("wScan", wintypes.WORD),
+                ("dwFlags", wintypes.DWORD),
+                ("time", wintypes.DWORD),
+                ("dwExtraInfo", ctypes.c_void_p),
+            ]
+
+        class INPUT_UNION(ctypes.Union):
+            _fields_ = [("ki", KEYBDINPUT)]
+
+        class INPUT(ctypes.Structure):
+            _fields_ = [("type", wintypes.DWORD), ("union", INPUT_UNION)]
+
+        flags = 0 if key_down else 0x0002
+        input_item = INPUT(type=1, union=INPUT_UNION(ki=KEYBDINPUT(vk_code, 0, flags, 0, None)))
+        sent = ctypes.windll.user32.SendInput(1, ctypes.byref(input_item), ctypes.sizeof(INPUT))
+        return int(sent or 0) == 1
+
+    def _should_use_sendinput_modifier_support(self) -> bool:
+        return str(self._driver_name or "").strip().lower() == "logitech"
+
+    def _sendinput_set_key_state(self, key: Any, key_down: bool) -> bool:
+        if not self._should_use_sendinput_modifier_support():
+            return True
+        normalized_key = str(key or "").strip()
+        if not self._is_modifier_key_name(normalized_key):
+            return True
+        ok = self._sendinput_key_event(normalized_key, key_down)
+        if ok:
+            if key_down:
+                self._sendinput_pressed_keys.add(normalized_key)
+            else:
+                self._sendinput_pressed_keys.discard(normalized_key)
+        return ok
+
+    def _sendinput_modified_key_press(
+        self,
+        key: Any,
+        held_keys: Sequence[Any],
+        duration: float,
+    ) -> bool:
+        if not self._should_use_sendinput_modifier_support():
+            return False
+
+        clean_held_keys = [str(item or "").strip() for item in held_keys or [] if str(item or "").strip()]
+        if not clean_held_keys or not all(self._is_modifier_key_name(item) for item in clean_held_keys):
+            return False
+
+        pressed_now: List[str] = []
+        try:
+            for held_key in clean_held_keys:
+                if held_key not in self._sendinput_pressed_keys:
+                    if not self._sendinput_key_event(held_key, True):
+                        return False
+                    self._sendinput_pressed_keys.add(held_key)
+                    pressed_now.append(held_key)
+
+            if not self._sendinput_key_event(key, True):
+                return False
+            if duration > 0:
+                _shared_precise_sleep(float(duration))
+            if not self._sendinput_key_event(key, False):
+                return False
+            return True
+        except Exception:
+            return False
+
     def _serialize_points(self, points: Sequence[Sequence[Any]]) -> str:
         serialized: List[str] = []
         for item in points:
@@ -1505,6 +1651,7 @@ class IbInputSimulatorDriver:
         if not normalized_key:
             return False
         with self._key_lock:
+            self._sendinput_set_key_state(normalized_key, True)
             self._request("key_down", normalized_key)
             self._pressed_keys.add(normalized_key)
         return True
@@ -1516,6 +1663,7 @@ class IbInputSimulatorDriver:
         with self._key_lock:
             self._request("key_up", normalized_key)
             self._pressed_keys.discard(normalized_key)
+            self._sendinput_set_key_state(normalized_key, False)
         return True
 
     def press_key(self, key: str, duration: float = _DEFAULT_KEY_HOLD_SECONDS) -> bool:
@@ -1529,6 +1677,55 @@ class IbInputSimulatorDriver:
             try:
                 # 由 worker 内部原子执行 down->hold->up，减少 IPC 往返抖动对按压时长的影响。
                 self._request("press_key", normalized_key, hold_duration)
+                self._pressed_keys.discard(normalized_key)
+                return True
+            except Exception:
+                return False
+
+    def modified_key_press(
+        self,
+        key: str,
+        held_keys: Optional[Sequence[Any]] = None,
+        duration: float = _DEFAULT_KEY_HOLD_SECONDS,
+    ) -> bool:
+        normalized_key = self._normalize_key(key)
+        if not normalized_key:
+            return False
+        try:
+            hold_duration = max(0.0, float(duration))
+        except Exception:
+            hold_duration = _DEFAULT_KEY_HOLD_SECONDS
+
+        normalized_held_keys: List[str] = []
+        for item in held_keys or []:
+            held_key = self._normalize_key(str(item))
+            if held_key and held_key != normalized_key:
+                normalized_held_keys.append(held_key)
+
+        if not normalized_held_keys:
+            return self.press_key(normalized_key, hold_duration)
+
+        with self._key_lock:
+            try:
+                if self._sendinput_modified_key_press(normalized_key, normalized_held_keys, hold_duration):
+                    logger.info(
+                        "[IbInputSimulator][Logitech] 使用 SendInput 组合键兜底: held=%s key=%s",
+                        normalized_held_keys,
+                        normalized_key,
+                    )
+                    for held_key in normalized_held_keys:
+                        self._pressed_keys.add(held_key)
+                    self._pressed_keys.discard(normalized_key)
+                    return True
+
+                self._request(
+                    "modified_key_press",
+                    normalized_key,
+                    hold_duration,
+                    *normalized_held_keys,
+                )
+                for held_key in normalized_held_keys:
+                    self._pressed_keys.add(held_key)
                 self._pressed_keys.discard(normalized_key)
                 return True
             except Exception:
@@ -1555,12 +1752,16 @@ class IbInputSimulatorDriver:
         """释放当前驱动记录的全部按下输入。"""
         pending_keys = list(self._pressed_keys)
         pending_buttons = list(self._pressed_mouse_buttons)
+        pending_sendinput_keys = list(self._sendinput_pressed_keys)
 
-        if not pending_keys and not pending_buttons:
+        if not pending_keys and not pending_buttons and not pending_sendinput_keys:
             return True
 
         try:
             if self._abort_request_event.is_set():
+                for key_name in reversed(pending_sendinput_keys):
+                    self._sendinput_key_event(key_name, False)
+                self._sendinput_pressed_keys.clear()
                 self._pressed_keys.clear()
                 self._pressed_mouse_buttons.clear()
                 return False
@@ -1569,6 +1770,9 @@ class IbInputSimulatorDriver:
                 "release_all_inputs",
                 timeout=min(2.0, max(0.5, float(self._request_timeout))),
             )
+            for key_name in reversed(pending_sendinput_keys):
+                self._sendinput_key_event(key_name, False)
+            self._sendinput_pressed_keys.clear()
             self._pressed_keys.clear()
             self._pressed_mouse_buttons.clear()
             return True
@@ -1583,6 +1787,13 @@ class IbInputSimulatorDriver:
                     )
                 except Exception:
                     release_ok = False
+            for key_name in reversed(pending_sendinput_keys):
+                try:
+                    if not self._sendinput_key_event(key_name, False):
+                        release_ok = False
+                except Exception:
+                    release_ok = False
+            self._sendinput_pressed_keys.clear()
             self._pressed_keys.clear()
             self._pressed_mouse_buttons.clear()
             return release_ok

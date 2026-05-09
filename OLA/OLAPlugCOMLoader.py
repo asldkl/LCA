@@ -10,9 +10,9 @@ import sys
 import json
 import logging
 import importlib.util
+import importlib.machinery
 import re
 from ctypes import WinDLL, c_int, WINFUNCTYPE, c_int32, c_int64, cast, c_void_p
-from pathlib import Path
 from typing import Optional, Union, Tuple, List, Callable
 
 import comtypes.client
@@ -38,9 +38,12 @@ class OLAPlugCOMLoader:
 
     DLL_NAME = "OLAPlug_x64.dll"
     PROGID = "OlaPlug.OlaSoft"  # COM ProgID
-    REQUIRED_COMTYPES_GEN_MODULES = (
-        "_00020430_0000_0000_C000_000000000046_0_2_0",
+    REQUIRED_COMTYPES_FRIENDLY_MODULES = (
         "OLAPlugLib",
+        "UIAutomationClient",
+    )
+    REQUIRED_COMTYPES_BASE_MODULES = (
+        "_00020430_0000_0000_C000_000000000046_0_2_0",
     )
 
     def __init__(self):
@@ -155,7 +158,8 @@ class OLAPlugCOMLoader:
         except Exception:
             pass
 
-        for module_name in self._resolve_required_comtypes_gen_modules(gen_dir):
+        module_names = self._resolve_required_comtypes_module_names(gen_dir)
+        for module_name in module_names:
             full_name = f"comtypes.gen.{module_name}"
             if full_name in sys.modules:
                 module_obj = sys.modules.get(full_name)
@@ -163,9 +167,9 @@ class OLAPlugCOMLoader:
                     setattr(comtypes.gen, module_name, module_obj)
                 continue
 
-            module_file = os.path.join(gen_dir, f"{module_name}.py")
-            if not os.path.isfile(module_file):
-                raise FileNotFoundError(f"缺少预生成 comtypes 文件: {module_file}")
+            module_file = self._find_comtypes_module_file(gen_dir, module_name)
+            if not module_file:
+                raise FileNotFoundError(f"缺少预生成 comtypes 文件: {module_name}")
 
             spec = importlib.util.spec_from_file_location(full_name, module_file)
             if spec is None or spec.loader is None:
@@ -180,36 +184,116 @@ class OLAPlugCOMLoader:
                 sys.modules.pop(full_name, None)
                 raise
 
-    def _extract_wrapper_module_names(self, module_file: str) -> List[str]:
-        if not os.path.isfile(module_file):
-            return []
-        try:
-            content = Path(module_file).read_text(encoding="utf-8", errors="ignore")
-        except Exception:
-            return []
+    def _resolve_required_comtypes_module_names(self, gen_dir: str) -> List[str]:
+        """
+        Resolve the generated comtypes modules to preload.
 
+        The OLA typelib wrapper filename can change between DLL builds. Packaged
+        releases ship the generated friendly modules, so use their imports as the
+        source of truth instead of pinning a stale GUID-based filename.
+        """
         module_names: List[str] = []
-        for match in re.findall(r"comtypes\.gen\.([A-Za-z0-9_]+)", content, flags=re.IGNORECASE):
-            normalized = str(match or "").strip()
-            if not normalized or normalized == "OLAPlugLib":
-                continue
-            if normalized not in module_names:
+
+        def add_module(name: str) -> None:
+            normalized = str(name or "").strip()
+            if normalized and normalized not in module_names:
                 module_names.append(normalized)
+
+        for module_name in self.REQUIRED_COMTYPES_BASE_MODULES:
+            add_module(module_name)
+
+        available_modules = self._scan_comtypes_gen_modules(gen_dir)
+        wrapper_pattern = re.compile(
+            r"comtypes\.gen\.(_[0-9A-F_]+_0_\d+_0)",
+            flags=re.IGNORECASE,
+        )
+
+        for friendly_module in self.REQUIRED_COMTYPES_FRIENDLY_MODULES:
+            friendly_source_path = os.path.join(gen_dir, f"{friendly_module}.py")
+            if os.path.isfile(friendly_source_path):
+                try:
+                    with open(friendly_source_path, "r", encoding="utf-8", errors="ignore") as f:
+                        content = f.read()
+                except OSError as exc:
+                    raise RuntimeError(f"无法读取预生成 comtypes 文件: {friendly_source_path}") from exc
+
+                for match in wrapper_pattern.finditer(content):
+                    add_module(match.group(1))
+
+        for module_name in sorted(available_modules):
+            if wrapper_pattern.fullmatch(f"comtypes.gen.{module_name}"):
+                add_module(module_name)
+
+        for friendly_module in self.REQUIRED_COMTYPES_FRIENDLY_MODULES:
+            add_module(friendly_module)
+
+        for module_name in module_names:
+            if not self._find_comtypes_module_file(gen_dir, module_name):
+                raise FileNotFoundError(f"缺少预生成 comtypes 文件: {module_name}")
+
         return module_names
 
-    def _resolve_required_comtypes_gen_modules(self, gen_dir: str) -> List[str]:
-        module_names: List[str] = []
-        for base_name in self.REQUIRED_COMTYPES_GEN_MODULES:
-            if base_name == "OLAPlugLib":
-                wrapper_names = self._extract_wrapper_module_names(
-                    os.path.join(gen_dir, "OLAPlugLib.py")
-                )
-                for wrapper_name in wrapper_names:
-                    if wrapper_name not in module_names:
-                        module_names.append(wrapper_name)
-            if base_name not in module_names:
-                module_names.append(base_name)
-        return module_names
+    def _scan_comtypes_gen_modules(self, gen_dir: str) -> List[str]:
+        module_names = set()
+        suffixes = tuple(importlib.machinery.SOURCE_SUFFIXES + importlib.machinery.BYTECODE_SUFFIXES)
+
+        def add_candidate(path: str) -> None:
+            filename = os.path.basename(path)
+            for suffix in suffixes:
+                if filename.endswith(suffix):
+                    stem = filename[:-len(suffix)]
+                    break
+            else:
+                return
+            if ".cpython-" in stem:
+                stem = stem.split(".cpython-", 1)[0]
+            if stem and stem != "__init__":
+                module_names.add(stem)
+
+        try:
+            for filename in os.listdir(gen_dir):
+                full_path = os.path.join(gen_dir, filename)
+                if os.path.isfile(full_path):
+                    add_candidate(full_path)
+        except OSError:
+            return []
+
+        cache_dir = os.path.join(gen_dir, "__pycache__")
+        if os.path.isdir(cache_dir):
+            try:
+                for filename in os.listdir(cache_dir):
+                    full_path = os.path.join(cache_dir, filename)
+                    if os.path.isfile(full_path):
+                        add_candidate(full_path)
+            except OSError:
+                pass
+
+        return sorted(module_names)
+
+    def _find_comtypes_module_file(self, gen_dir: str, module_name: str) -> str:
+        normalized_name = str(module_name or "").strip()
+        if not normalized_name:
+            return ""
+
+        for suffix in importlib.machinery.SOURCE_SUFFIXES + importlib.machinery.BYTECODE_SUFFIXES:
+            candidate = os.path.join(gen_dir, f"{normalized_name}{suffix}")
+            if os.path.isfile(candidate):
+                return candidate
+
+        cache_dir = os.path.join(gen_dir, "__pycache__")
+        if os.path.isdir(cache_dir):
+            try:
+                for filename in sorted(os.listdir(cache_dir)):
+                    if not filename.startswith(f"{normalized_name}."):
+                        continue
+                    if any(filename.endswith(suffix) for suffix in importlib.machinery.BYTECODE_SUFFIXES):
+                        candidate = os.path.join(cache_dir, filename)
+                        if os.path.isfile(candidate):
+                            return candidate
+            except OSError:
+                return ""
+
+        return ""
 
     def load_com_object(self):
         """加载 COM 对象

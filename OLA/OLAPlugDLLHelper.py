@@ -1,4 +1,5 @@
 import os
+import sys
 from ctypes import (
     # Windows 特定类型
     wintypes,
@@ -37,6 +38,50 @@ _kernel32.GetProcAddress.restype = c_void_p
 
 _kernel32.FreeLibrary.argtypes = [wintypes.HMODULE]
 _kernel32.FreeLibrary.restype = wintypes.BOOL
+
+
+def _resolve_ola_dll_path(dll_name: str) -> str:
+    candidate_dirs = []
+
+    try:
+        from plugins.adapters.ola.runtime_config import get_ola_sdk_dir
+        candidate_dirs.append(get_ola_sdk_dir())
+    except Exception:
+        pass
+
+    if getattr(sys, "frozen", False) and sys.executable:
+        exe_dir = os.path.dirname(os.path.abspath(sys.executable))
+        candidate_dirs.append(os.path.join(exe_dir, "OLA"))
+
+    try:
+        candidate_dirs.append(os.path.dirname(os.path.abspath(__file__)))
+    except Exception:
+        pass
+
+    candidate_dirs.append(os.path.join(os.getcwd(), "OLA"))
+
+    visited = set()
+    for candidate_dir in candidate_dirs:
+        if not candidate_dir:
+            continue
+        try:
+            normalized_dir = os.path.normcase(os.path.abspath(candidate_dir))
+        except Exception:
+            continue
+        if normalized_dir in visited:
+            continue
+        visited.add(normalized_dir)
+
+        candidate_path = os.path.join(normalized_dir, dll_name)
+        if os.path.isfile(candidate_path):
+            try:
+                if hasattr(os, "add_dll_directory"):
+                    os.add_dll_directory(normalized_dir)
+            except Exception:
+                pass
+            return candidate_path
+
+    return os.path.join(candidate_dirs[0] if candidate_dirs else os.getcwd(), dll_name)
 
 
 # ========== 装饰器定义 ==========
@@ -153,7 +198,7 @@ class OLAPlugDLLHelper:
 
     # 定义DLL
     DLL = "OLAPlug_x64.dll"
-    _dll = WinDLL(os.path.join(os.path.dirname(os.path.abspath(__file__)), DLL))
+    _dll = WinDLL(_resolve_ola_dll_path(DLL))
     _dll_base = _dll._handle
 
     # 回调函数持久化使用

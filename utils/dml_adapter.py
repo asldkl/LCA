@@ -7,6 +7,19 @@ logger = logging.getLogger(__name__)
 
 DXGI_ERROR_NOT_FOUND = 0x887A0002
 DXGI_ADAPTER_FLAG_SOFTWARE = 0x00000002
+DISCRETE_ADAPTER_MIN_DEDICATED_VIDEO = 512 * 1024 * 1024
+DML_PROVIDER_NAME = "DmlExecutionProvider"
+CUDA_PROVIDER_NAME = "CUDAExecutionProvider"
+CPU_PROVIDER_NAME = "CPUExecutionProvider"
+TENSORRT_PROVIDER_NAME = "TensorrtExecutionProvider"
+
+GPU_PROVIDER_NAMES = frozenset(
+    {
+        DML_PROVIDER_NAME,
+        CUDA_PROVIDER_NAME,
+        TENSORRT_PROVIDER_NAME,
+    }
+)
 
 
 class LUID(ctypes.Structure):
@@ -115,17 +128,40 @@ def _enum_dxgi_adapters():
     return adapters
 
 
-def _select_discrete_adapter(adapters):
+def _select_preferred_hardware_adapter(adapters):
     if not adapters:
         return None
-    discrete = [
+    hardware_adapters = [
         a
         for a in adapters
-        if (a["flags"] & DXGI_ADAPTER_FLAG_SOFTWARE) == 0 and a["dedicated_video"] > 0
+        if (int(a.get("flags", 0)) & DXGI_ADAPTER_FLAG_SOFTWARE) == 0
+    ]
+    if not hardware_adapters:
+        return None
+
+    discrete = [
+        a
+        for a in hardware_adapters
+        if int(a.get("dedicated_video", 0)) >= DISCRETE_ADAPTER_MIN_DEDICATED_VIDEO
     ]
     if discrete:
-        return max(discrete, key=lambda a: a["dedicated_video"])
-    return adapters[0]
+        return max(discrete, key=lambda a: int(a.get("dedicated_video", 0)))
+
+    integrated = [
+        a
+        for a in hardware_adapters
+        if int(a.get("shared_system", 0)) > 0 or int(a.get("dedicated_video", 0)) > 0
+    ]
+    if integrated:
+        return max(
+            integrated,
+            key=lambda a: (
+                int(a.get("dedicated_video", 0)),
+                int(a.get("shared_system", 0)),
+            ),
+        )
+
+    return hardware_adapters[0]
 
 
 def select_dml_device_id():
@@ -138,10 +174,53 @@ def select_dml_device_id():
             logger.warning("Invalid LCA_DML_DEVICE_ID: %s", env_id)
 
     adapters = _enum_dxgi_adapters()
-    selected = _select_discrete_adapter(adapters)
+    selected = _select_preferred_hardware_adapter(adapters)
     if not selected:
+        # If DXGI probing is unavailable, let DirectML use its default adapter.
         return 0, "default"
 
     device_id = int(selected["index"])
     desc = selected.get("description") or f"adapter_{device_id}"
     return device_id, desc
+
+
+def provider_name_from_entry(provider_entry):
+    if isinstance(provider_entry, (tuple, list)) and provider_entry:
+        return str(provider_entry[0])
+    return str(provider_entry)
+
+
+def is_gpu_onnx_provider(provider_name):
+    return str(provider_name or "") in GPU_PROVIDER_NAMES
+
+
+def build_onnxruntime_providers(available_providers):
+    """Build the shared ONNX Runtime provider chain used by YOLO and map tracking.
+
+    The app should not force a CPU/GPU mode here. Prefer DirectML when the runtime
+    actually exposes it, then reuse the YOLO-style stable CPU fallback. CUDA and
+    TensorRT may be listed by onnxruntime-gpu even when the matching native DLLs
+    are not usable; initializing them can terminate the worker process before
+    Python can catch an exception, so they are intentionally ignored.
+    """
+    normalized_providers = tuple(str(provider) for provider in (available_providers or ()) if provider)
+    normalized_set = set(normalized_providers)
+    providers = []
+    device_desc = "auto"
+
+    if DML_PROVIDER_NAME in normalized_set:
+        device_id, device_desc = select_dml_device_id()
+        providers.append((DML_PROVIDER_NAME, {"device_id": int(device_id)}))
+
+    if CPU_PROVIDER_NAME in normalized_set:
+        providers.append(CPU_PROVIDER_NAME)
+        if device_desc == "auto":
+            device_desc = CPU_PROVIDER_NAME
+
+    if not providers:
+        raise RuntimeError(
+            f"No stable ONNX Runtime execution providers are available; "
+            f"available providers: {list(normalized_providers)}"
+        )
+
+    return providers, device_desc
