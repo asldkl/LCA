@@ -3,31 +3,61 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
+import importlib
 from typing import Optional
 
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QApplication, QDialog, QLabel, QMessageBox, QPushButton, QVBoxLayout
 
-from utils.updater import (
-    UPDATE_STATUS_CHECKING,
-    UPDATE_STATUS_DOWNLOADING,
-    UPDATE_STATUS_ERROR,
-    UPDATE_STATUS_IDLE,
-    UPDATE_STATUS_INSTALLING,
-    UPDATE_STATUS_READY,
-    check_update_now,
-    get_update_status,
-    request_install,
-    spawn_updater_process,
-    stop_updater,
-)
-
 logger = logging.getLogger(__name__)
 
+UPDATE_STATUS_IDLE = "idle"
+UPDATE_STATUS_CHECKING = "checking"
+UPDATE_STATUS_DOWNLOADING = "downloading"
+UPDATE_STATUS_READY = "ready"
+UPDATE_STATUS_INSTALLING = "installing"
+UPDATE_STATUS_ERROR = "error"
 STATUS_POLL_INTERVAL_MS = 2000
 INSTALL_START_TIMEOUT_SEC = 15.0
+_CLIENT_SOFTWARE_UPDATE_ENABLED = str(os.getenv("ENABLE_CLIENT_SOFTWARE_UPDATE", "") or "").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+
+
+def is_client_software_update_enabled() -> bool:
+    return bool(_CLIENT_SOFTWARE_UPDATE_ENABLED)
+
+
+def _load_updater_module():
+    return importlib.import_module("utils.updater")
+
+
+def spawn_updater_process(check_interval: int = 3600):
+    return _load_updater_module().spawn_updater_process(check_interval=check_interval)
+
+
+def stop_updater() -> None:
+    if not is_client_software_update_enabled():
+        return
+    _load_updater_module().stop_updater()
+
+
+def check_update_now() -> None:
+    _load_updater_module().check_update_now()
+
+
+def get_update_status():
+    return _load_updater_module().get_update_status()
+
+
+def request_install() -> None:
+    _load_updater_module().request_install()
 
 
 class UpdateNotificationDialog(QDialog):
@@ -96,6 +126,10 @@ class UpdateIntegration:
 
     def start(self, check_interval: int = 3600) -> None:
         """启动更新守护线程。"""
+        if not is_client_software_update_enabled():
+            logger.info("客户端在线更新已禁用")
+            return
+
         if self._is_running:
             logger.warning("更新线程已在运行，跳过重复启动")
             return
@@ -135,6 +169,12 @@ class UpdateIntegration:
 
     def enable(self, enabled: bool) -> None:
         """启用或停用自动更新。"""
+        if enabled and not is_client_software_update_enabled():
+            if self._is_running:
+                self.stop()
+            logger.info("客户端在线更新已禁用，跳过启用")
+            return
+
         if enabled and not self._is_running:
             self.start(check_interval=self._check_interval)
         elif not enabled and self._is_running:
@@ -142,6 +182,10 @@ class UpdateIntegration:
 
     def check_now(self) -> None:
         """立即检查更新。"""
+        if not is_client_software_update_enabled():
+            logger.info("客户端在线更新已禁用，跳过手动检查")
+            return
+
         self._notified = False
         self._ready_remind_at = 0.0
         if not self._ensure_updater_running():
@@ -156,6 +200,10 @@ class UpdateIntegration:
         return check_update_action
 
     def _manual_check(self) -> None:
+        if not is_client_software_update_enabled():
+            QMessageBox.information(self.main_window, "检查更新", "客户端在线更新已禁用。")
+            return
+
         self._notified = False
         self._ready_remind_at = 0.0
         if not self._ensure_updater_running():
@@ -169,6 +217,9 @@ class UpdateIntegration:
         )
 
     def _ensure_updater_running(self) -> bool:
+        if not is_client_software_update_enabled():
+            return False
+
         if self._is_running:
             return True
         self.start(check_interval=self._check_interval)
@@ -318,9 +369,11 @@ def add_update_to_window(
     if help_menu:
         integration.setup_menu_action(help_menu)
 
-    if auto_check:
+    if auto_check and is_client_software_update_enabled():
         delay_ms = 3000
         logger.info(f"更新功能将在 {delay_ms // 1000} 秒后启动，检查间隔: {check_interval} 秒")
         QTimer.singleShot(delay_ms, lambda: integration.start(check_interval=check_interval))
+    elif auto_check:
+        logger.info("客户端在线更新已禁用，跳过自动检查")
 
     return integration
