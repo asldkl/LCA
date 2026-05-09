@@ -14,72 +14,7 @@ logger = logging.getLogger(__name__)
 
 class MainWindowFavoritesMixin:
     def _apply_market_runtime_task_state(self, task_id: int, source_ref: str) -> None:
-
-        task = self.task_manager.get_task(task_id)
-
-        if not task:
-
-            return
-
-        task.read_only_mode = True
-
-        task.read_only_reason = '共享平台脚本运行态只读'
-
-        task.source_ref = source_ref
-
-        task.market_runtime_ref = source_ref
-
-        try:
-
-            from market.storage import resolve_runtime_session_dir
-
-            session_dir = resolve_runtime_session_dir(str(getattr(task, 'filepath', '') or ''))
-
-            task.market_session_dir = str(session_dir) if session_dir else ''
-
-        except Exception:
-
-            task.market_session_dir = ''
-
-        try:
-
-            from market.refs import parse_market_workflow_ref
-
-            ref_info = parse_market_workflow_ref(source_ref) or {}
-
-            package_id = str(ref_info.get('package_id') or '').strip()
-
-            version = str(ref_info.get('version') or '').strip()
-
-            if package_id and version:
-
-                task.name = f'共享平台:{package_id}[{version}]'
-
-        except Exception:
-
-            pass
-
-        workflow_view = self.workflow_tab_widget.task_views.get(task_id)
-
-        if workflow_view is not None:
-
-            workflow_view.setInteractive(False)
-
-            workflow_view.setEnabled(False)
-
-            workflow_view.setToolTip('共享平台脚本运行态只读')
-
-        tab_index = self.workflow_tab_widget.task_to_tab.get(task_id)
-
-        if tab_index is not None:
-
-            try:
-
-                self.workflow_tab_widget.setTabText(tab_index, task.name)
-
-            except Exception:
-
-                pass
+        return None
 
     def _on_favorite_workflow_check_changed(self, filepath: str, checked: bool):
 
@@ -97,11 +32,11 @@ class MainWindowFavoritesMixin:
 
                     if task_id is not None:
 
-                        logger.info(f"共享平台脚本收藏已打开，任务ID: {task_id}")
+                        logger.info(f"收藏工作流已打开，任务ID: {task_id}")
 
                     return
 
-                logger.info(f"共享平台脚本收藏已取消，关闭对应运行标签: {filepath}")
+                logger.info(f"收藏工作流已取消，关闭对应运行标签: {filepath}")
 
                 task = self.task_manager.find_task_by_filepath(filepath)
 

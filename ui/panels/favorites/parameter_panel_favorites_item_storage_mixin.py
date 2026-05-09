@@ -12,7 +12,7 @@ class ParameterPanelFavoritesItemStorageMixin:
                 return f"{package_id}[{version}]"
             if package_id:
                 return package_id
-            return "共享平台脚本"
+            return "工作流"
 
         normalized_path = os.path.normpath(raw_path)
         if not normalized_path:

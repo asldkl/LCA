@@ -69,6 +69,7 @@ class ParameterPanelFavoritesViewEntryMixin:
 
 
                 show_and_raise_widget(self, log_prefix='收藏面板展示')
+                QTimer.singleShot(0, self._position_panel)
 
 
 
@@ -89,12 +90,6 @@ class ParameterPanelFavoritesViewEntryMixin:
 
 
                 if view_name == 'market':
-
-
-
-                    self._open_market_window()
-
-
 
                     return
 

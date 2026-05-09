@@ -48,7 +48,6 @@ from .main_window_window_binding_mixin import MainWindowWindowBindingMixin
 from .main_window_window_validation_mixin import MainWindowWindowValidationMixin
 from .main_window_execution_flow_mixin import MainWindowExecutionFlowMixin
 from .main_window_dialog_mixin import MainWindowDialogMixin
-from .main_window_market_workflow_mixin import MainWindowMarketWorkflowMixin
 from .main_window_platform_mixin import MainWindowPlatformMixin
 from .main_window_executor_cleanup_mixin import MainWindowExecutorCleanupMixin
 from .main_window_workflow_canvas_mixin import MainWindowWorkflowCanvasMixin
@@ -82,7 +81,6 @@ class MainWindow(
     MainWindowWindowValidationMixin,
     MainWindowExecutionFlowMixin,
     MainWindowDialogMixin,
-    MainWindowMarketWorkflowMixin,
     MainWindowPlatformMixin,
     MainWindowExecutorCleanupMixin,
     MainWindowWorkflowCanvasMixin,
@@ -125,3 +123,18 @@ class MainWindow(
         )
         self._setup_main_window_ui()
         self._finalize_main_window_startup()
+
+    def _resolve_market_workflow(self, workflow_ref: str, access_mode: str, switch_to_tab: bool = False) -> str:
+        raise RuntimeError("script sharing has been removed")
+
+    def _resolve_market_workflow_for_canvas(self, workflow_ref: str, switch_to_tab: bool = False) -> str:
+        return self._resolve_market_workflow(workflow_ref, access_mode="edit", switch_to_tab=switch_to_tab)
+
+    def _resolve_market_workflow_for_batch(self, workflow_ref: str, switch_to_tab: bool = False) -> str:
+        return self._resolve_market_workflow(workflow_ref, access_mode="run", switch_to_tab=switch_to_tab)
+
+    def _cleanup_uninstalled_market_package(self, package_id: str, version: str) -> None:
+        return None
+
+    def _is_market_workflow_ref(self, filepath: str) -> bool:
+        return False

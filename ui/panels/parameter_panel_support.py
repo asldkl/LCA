@@ -29,12 +29,9 @@ from utils.app_paths import (
     normalize_workflow_image_path,
 )
 from utils.thread_start_utils import THREAD_START_TASK_TYPE, is_thread_start_task_type
-from market.package_scope import package_scope_matches_value, resolve_market_workflow_ref_from_value
-from market.refs import is_market_workflow_ref, parse_market_workflow_ref
 from tasks.random_jump import get_branch_weight, set_branch_weight
 from ..widgets.custom_widgets import CustomDropdown as QComboBox
 from ..system_parts.menu_style import apply_unified_menu_style
-from ..market.market_window import MarketWindow
 
 # 导入截图工具
 from ..selectors.screenshot_tool import QuickScreenshotButton
@@ -42,6 +39,22 @@ from ..selectors.screenshot_tool import QuickScreenshotButton
 # 统一下拉框样式
 
 logger = logging.getLogger(__name__)
+
+
+def is_market_workflow_ref(value: object) -> bool:
+    return False
+
+
+def parse_market_workflow_ref(value: object):
+    return None
+
+
+def resolve_market_workflow_ref_from_value(value: object) -> str:
+    return ""
+
+
+def package_scope_matches_value(value: object, package_id: str, version: str) -> bool:
+    return False
 
 from .support.parameter_panel_support_buttons import CloseButton, ResponsiveButton
 from .support.parameter_panel_support_filters import (

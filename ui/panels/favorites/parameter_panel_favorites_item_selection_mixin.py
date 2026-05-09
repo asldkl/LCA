@@ -86,7 +86,7 @@ class ParameterPanelFavoritesItemSelectionMixin:
         gallery_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         is_local_workflow = bool(fav.get("filepath")) and not is_market_workflow_ref(fav.get("filepath"))
         gallery_button.setEnabled(is_local_workflow)
-        gallery_button.setToolTip("为当前工作流设置自定义图库目录" if is_local_workflow else "共享平台工作流不支持此操作")
+        gallery_button.setToolTip("为当前工作流设置自定义图库目录" if is_local_workflow else "该工作流不支持此操作")
         if is_local_workflow:
             gallery_button.clicked.connect(
                 lambda _checked=False, fp=fav["filepath"]: self._on_favorites_gallery_browse(fp)

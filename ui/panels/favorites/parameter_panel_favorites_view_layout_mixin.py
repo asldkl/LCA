@@ -8,7 +8,7 @@ class ParameterPanelFavoritesViewLayoutMixin:
 
 
 
-                """创建工作流收藏界面，并提供独立脚本共享平台入口"""
+                """创建工作流收藏界面。"""
 
 
 
@@ -28,19 +28,19 @@ class ParameterPanelFavoritesViewLayoutMixin:
 
 
 
-                self._favorites_market_open_btn = QPushButton("打开脚本共享平台")
+                self._favorites_market_open_btn = None
 
 
 
-                self._favorites_market_open_btn.setMinimumHeight(32)
+                # Script market removed.
 
 
 
-                self._favorites_market_open_btn.clicked.connect(self._open_market_window)
+                # Script market removed.
 
 
 
-                entry_layout.addWidget(self._favorites_market_open_btn)
+                # Script market removed.
 
 
 

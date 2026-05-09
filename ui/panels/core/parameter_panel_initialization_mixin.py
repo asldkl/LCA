@@ -56,7 +56,7 @@ class ParameterPanelInitializationMixin:
         self._favorites_pending_close_paths: Dict[str, str] = {}
         self._favorites_active_view: str = "favorites"
         self._favorites_config_path = get_favorites_path()
-        self._market_window: Optional[MarketWindow] = None
+        self._market_window = None
 
     def _configure_panel_window(self) -> None:
         self.setWindowFlags(

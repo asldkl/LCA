@@ -167,7 +167,7 @@ class MainWindowActionsMixin:
 
             # 检查配置是否启用更新检查
 
-            enable_update = self.config.get('enable_update_check', True)
+            enable_update = self.config.get('enable_update_check', False)
 
             self.update_integration = add_update_to_window(
 

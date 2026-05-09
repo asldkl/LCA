@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import shutil
+import time
 from typing import Dict, List, Optional, Any
 from .interface import IPluginAdapter, PluginCapability
 from plugins.adapters.ola.runtime_config import normalize_ola_auth_settings
@@ -35,6 +36,17 @@ def _migrate_plugin_config(target_path: str) -> None:
         shutil.copy2(legacy_path, target_path)
     except Exception as e:
         logger.warning(f"迁移插件配置失败: {e}")
+
+
+def _backup_invalid_plugin_config(config_path: str) -> None:
+    if not config_path or not os.path.exists(config_path):
+        return
+    backup_path = f"{config_path}.invalid.{int(time.time())}.bak"
+    try:
+        os.replace(config_path, backup_path)
+        logger.warning(f"已备份无效插件配置文件: {backup_path}")
+    except OSError as e:
+        logger.warning(f"备份无效插件配置失败，将直接覆盖: {e}")
 
 
 class PluginManager:
@@ -93,6 +105,13 @@ class PluginManager:
                 self._create_default_config(config_path)
         except Exception as e:
             logger.error(f"加载插件配置失败: {e}", exc_info=True)
+            try:
+                _backup_invalid_plugin_config(config_path)
+                self._create_default_config(config_path)
+                self._enabled = bool(self._config.get('plugin_system_enabled', False))
+                logger.warning(f"已重建默认插件配置: {config_path}")
+            except Exception as repair_error:
+                logger.error(f"重建默认插件配置失败: {repair_error}", exc_info=True)
 
     def _load_main_plugin_settings(self) -> Dict[str, Any]:
         try:
@@ -149,6 +168,7 @@ class PluginManager:
             with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(default_config, f, indent=2, ensure_ascii=False)
             self._config = default_config
+            self._enabled = bool(default_config.get('plugin_system_enabled', False))
             logger.info(f"已创建默认插件配置: {config_path}")
         except Exception as e:
             logger.error(f"创建默认配置失败: {e}", exc_info=True)
